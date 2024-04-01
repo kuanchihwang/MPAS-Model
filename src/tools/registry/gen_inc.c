@@ -15,6 +15,10 @@
 #include "fortprintf.h"
 #include "utility.h"
 
+#ifdef MPAS_CAM_DYCORE
+#include <ctype.h>
+#endif
+
 void process_core_macro(const char *macro, const char *val, va_list ap);
 void process_domain_macro(const char *macro, const char *val, va_list ap);
 
@@ -696,8 +700,18 @@ int parse_namelist_records_from_registry(ezxml_t registry)/*{{{*/
 	ezxml_t nmlrecs_xml, nmlopt_xml;
 
 	const char *const_core;
-	const char *nmlrecname, *nmlrecindef, *nmlrecinsub;
-	const char *nmloptname, *nmlopttype, *nmloptval, *nmloptunits, *nmloptdesc, *nmloptposvals, *nmloptindef;
+#ifdef MPAS_CAM_DYCORE
+	const char *orinmlrecname;
+	const char *orinmloptname;
+	// Fortran variable names have a length limit of 63 characters. +1 for the terminating null character.
+	char nmlrecname[64];
+	char nmloptname[64];
+#else
+	const char *nmlrecname;
+	const char *nmloptname;
+#endif
+	const char *nmlrecindef, *nmlrecinsub;
+	const char *nmlopttype, *nmloptval, *nmloptunits, *nmloptdesc, *nmloptposvals, *nmloptindef;
 
 	char pool_name[1024];
 	char core_string[1024];
@@ -743,7 +757,12 @@ int parse_namelist_records_from_registry(ezxml_t registry)/*{{{*/
 
 	// Parse Namelist Records
 	for (nmlrecs_xml = ezxml_child(registry, "nml_record"); nmlrecs_xml; nmlrecs_xml = nmlrecs_xml->next){
+#ifdef MPAS_CAM_DYCORE
+		orinmlrecname = ezxml_attr(nmlrecs_xml, "name");
+		transform_name(nmlrecname, sizeof(nmlrecname), orinmlrecname);
+#else
 		nmlrecname = ezxml_attr(nmlrecs_xml, "name");
+#endif
 		nmlrecindef = ezxml_attr(nmlrecs_xml, "in_defaults");
 		nmlrecinsub = ezxml_attr(nmlrecs_xml, "in_subpool");
 
@@ -777,7 +796,12 @@ int parse_namelist_records_from_registry(ezxml_t registry)/*{{{*/
 
 		// Define variable definitions prior to reading the namelist in.
 		for (nmlopt_xml = ezxml_child(nmlrecs_xml, "nml_option"); nmlopt_xml; nmlopt_xml = nmlopt_xml->next){
+#ifdef MPAS_CAM_DYCORE
+			orinmloptname = ezxml_attr(nmlopt_xml, "name");
+			transform_name(nmloptname, sizeof(nmloptname), orinmloptname);
+#else
 			nmloptname = ezxml_attr(nmlopt_xml, "name");
+#endif
 			nmlopttype = ezxml_attr(nmlopt_xml, "type");
 			nmloptval = ezxml_attr(nmlopt_xml, "default_value");
 			nmloptunits = ezxml_attr(nmlopt_xml, "units");
@@ -809,7 +833,12 @@ int parse_namelist_records_from_registry(ezxml_t registry)/*{{{*/
 		// Define the namelist block, to read the namelist record in.
 		fortprintf(fd, "      namelist /%s/ &\n", nmlrecname);
 		for (nmlopt_xml = ezxml_child(nmlrecs_xml, "nml_option"); nmlopt_xml; nmlopt_xml = nmlopt_xml->next){
+#ifdef MPAS_CAM_DYCORE
+			orinmloptname = ezxml_attr(nmlopt_xml, "name");
+			transform_name(nmloptname, sizeof(nmloptname), orinmloptname);
+#else
 			nmloptname = ezxml_attr(nmlopt_xml, "name");
+#endif
 			if(nmlopt_xml->next){
 				fortprintf(fd, "         %s, &\n", nmloptname);
 			} else {
@@ -840,7 +869,12 @@ int parse_namelist_records_from_registry(ezxml_t registry)/*{{{*/
 		// Define broadcast calls for namelist values.
 		fortprintf(fd, "      if (ierr <= 0) then\n");
 		for (nmlopt_xml = ezxml_child(nmlrecs_xml, "nml_option"); nmlopt_xml; nmlopt_xml = nmlopt_xml->next){
+#ifdef MPAS_CAM_DYCORE
+			orinmloptname = ezxml_attr(nmlopt_xml, "name");
+			transform_name(nmloptname, sizeof(nmloptname), orinmloptname);
+#else
 			nmloptname = ezxml_attr(nmlopt_xml, "name");
+#endif
 			nmlopttype = ezxml_attr(nmlopt_xml, "type");
 
 			if(strncmp(nmlopttype, "real", 1024) == 0){
@@ -858,7 +892,12 @@ int parse_namelist_records_from_registry(ezxml_t registry)/*{{{*/
 		fortprintf(fd, "            call mpas_log_write('    The following values will be used for variables in this record:')\n");
 		fortprintf(fd, "            call mpas_log_write(' ')\n");
 		for (nmlopt_xml = ezxml_child(nmlrecs_xml, "nml_option"); nmlopt_xml; nmlopt_xml = nmlopt_xml->next){
+#ifdef MPAS_CAM_DYCORE
+			orinmloptname = ezxml_attr(nmlopt_xml, "name");
+			transform_name(nmloptname, sizeof(nmloptname), orinmloptname);
+#else
 			nmloptname = ezxml_attr(nmlopt_xml, "name");
+#endif
 			nmlopttype = ezxml_attr(nmlopt_xml, "type");
 
 			if (strncmp(nmlopttype, "character", 1024) == 0) {
@@ -885,10 +924,18 @@ int parse_namelist_records_from_registry(ezxml_t registry)/*{{{*/
 		fortprintf(fd, "\n");
 
 		for (nmlopt_xml = ezxml_child(nmlrecs_xml, "nml_option"); nmlopt_xml; nmlopt_xml = nmlopt_xml->next){
+#ifdef MPAS_CAM_DYCORE
+			orinmloptname = ezxml_attr(nmlopt_xml, "name");
+			transform_name(nmloptname, sizeof(nmloptname), orinmloptname);
+
+			fortprintf(fd, "      call mpas_pool_add_config(%s, '%s', %s)\n", pool_name, orinmloptname, nmloptname);
+			fortprintf(fcg, "      call mpas_pool_get_config(configPool, '%s', %s)\n", orinmloptname, nmloptname);
+#else
 			nmloptname = ezxml_attr(nmlopt_xml, "name");
 
 			fortprintf(fd, "      call mpas_pool_add_config(%s, '%s', %s)\n", pool_name, nmloptname, nmloptname);
 			fortprintf(fcg, "      call mpas_pool_get_config(configPool, '%s', %s)\n", nmloptname, nmloptname);
+#endif
 		}
 		fortprintf(fd, "\n");
 		fortprintf(fcg, "\n");
@@ -2532,3 +2579,51 @@ int parse_structs_from_registry(ezxml_t registry)/*{{{*/
 
 	return 0;
 }/*}}}*/
+
+
+#ifdef MPAS_CAM_DYCORE
+// Just like `strncmp`, but case-insensitive.
+int strncmp_case(const char *string_1, const char *string_2, const size_t compare_size) {
+    int result = 0;
+    size_t i = 0;
+
+    if (!string_1 || !string_2 || compare_size == 0) return result;
+
+    while (i < compare_size) {
+        result = tolower((unsigned char) *(string_1 + i)) - tolower((unsigned char) *(string_2 + i));
+
+        if (result != 0 || *(string_1 + i) == '\0' || *(string_2 + i) == '\0') break;
+
+        i++;
+    }
+
+    return result;
+}
+
+
+// Perform transformations for namelist group and option names.
+void transform_name(char *new_name, const size_t new_name_size, const char *old_name) {
+    const char *const new_prefix = "mpas_";
+    const char *const old_prefix = "config_";
+    size_t size = 0;
+
+    if (!new_name || !old_name || new_name_size == 0) return;
+
+    // Remove all leading whitespaces by moving pointer forward.
+    while (*old_name != '\0' && isspace((unsigned char) *old_name)) old_name++;
+
+    // Remove all leading `config_` by moving pointer forward.
+    while (strncmp_case(old_name, old_prefix, strlen(old_prefix)) == 0) old_name += strlen(old_prefix);
+
+    // Remove all leading `mpas_` by moving pointer forward.
+    while (strncmp_case(old_name, new_prefix, strlen(new_prefix)) == 0) old_name += strlen(new_prefix);
+
+    *new_name = '\0';
+    size = snprintf(NULL, 0, "%s%s", new_prefix, old_name) + 1;
+    snprintf(new_name, size > new_name_size ? new_name_size : size, "%s%s", new_prefix, old_name);
+
+    // Remove all trailing whitespaces by zeroing (nulling) out.
+    new_name += strlen(new_name) - 1;
+    while (*new_name != '\0' && isspace((unsigned char) *new_name)) *new_name-- = '\0';
+}
+#endif

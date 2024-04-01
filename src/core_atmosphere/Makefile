@@ -4,8 +4,9 @@
 # To build a dycore-only MPAS-Atmosphere model, comment-out or delete
 # the definition of PHYSICS, below
 #
-PHYSICS=-DDO_PHYSICS
-
+ifeq ($(findstring MPAS_CAM_DYCORE,$(CPPFLAGS)),)
+    PHYSICS = -DDO_PHYSICS
+endif
 
 ifdef PHYSICS
     PHYSCORE = physcore

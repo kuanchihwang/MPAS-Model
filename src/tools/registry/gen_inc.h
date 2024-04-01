@@ -38,3 +38,7 @@ int push_attributes(ezxml_t currentPosition);
 int merge_structs_and_var_arrays(ezxml_t currentPosition);
 int merge_streams(ezxml_t registry);
 int parse_structs_from_registry(ezxml_t registry);
+
+#ifdef MPAS_CAM_DYCORE
+void transform_name(char *new_name, const size_t new_name_size, const char *old_name);
+#endif
